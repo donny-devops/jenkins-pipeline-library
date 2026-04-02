@@ -1,0 +1,36 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# Maven
+target/
+*.class
+*.jar
+*.war
+
+# Groovy / Jenkins
+*.groovy.bak
+work/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

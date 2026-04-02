@@ -1,0 +1,131 @@
+# example-pipeline.yaml — Full schema reference for dynamicPipeline()
+#
+# Place this file at the root of your application repository as:
+#   pipeline.yaml  (or pipeline.yml / pipeline.json / .jenkins/pipeline.yaml)
+#
+# Then add to your Jenkinsfile:
+#   @Library('pipeline-library') _
+#   dynamicPipeline()
+#
+# ──────────────────────────────────────────────────────────────────────────────
+
+pipeline:
+  agent: docker                       # Jenkins agent label
+  timeout: 90                         # Pipeline-wide timeout in minutes
+
+  # Global environment variables injected into every stage.
+  env:
+    APP_NAME: my-api
+    DEPLOY_ENV: staging
+    REGISTRY: registry.example.com/myteam
+
+stages:
+
+  # ── 1. Build ──────────────────────────────────────────────────────────────
+  - name: Build
+    type: shell                        # type: shell | test | docker | deploy | parallel
+    timeout: 15                        # Stage timeout in minutes (default: 30)
+    script: mvn clean package -DskipTests -B -q
+    environment:
+      MAVEN_OPTS: "-Xmx1g"
+    onSuccess: echo "Build artifacts ready"
+    onFailure: "curl -X POST $SLACK_WEBHOOK -d '{\"text\":\"Build failed!\"}'"
+
+  # ── 2. Unit Tests ─────────────────────────────────────────────────────────
+  - name: Unit Tests
+    type: test
+    script: mvn test -B
+    timeout: 20
+    retries: 1
+    reports:
+      junit: "**/surefire-reports/*.xml"
+      cobertura: "**/site/jacoco/jacoco.xml"
+
+  # ── 3. Integration Tests (conditional) ───────────────────────────────────
+  - name: Integration Tests
+    type: test
+    # Only runs on main, release/*, or hotfix/* branches.
+    condition: "branch in ['main', 'release/*', 'hotfix/*']"
+    script: mvn verify -Pintegration-tests -B
+    timeout: 40
+    environment:
+      DB_URL: jdbc:postgresql://test-db:5432/testdb
+      DB_PASS: testpass
+    reports:
+      junit: "**/failsafe-reports/*.xml"
+      htmlDir: target/site/failsafe-report
+      htmlIndex: index.html
+
+  # ── 4. Performance Tests (disabled by default) ────────────────────────────
+  - name: Performance Tests
+    type: test
+    enabled: false                     # Set to true or override via skipStages=[...]
+    script: |
+      k6 run --vus 50 --duration 60s \
+        --out json=k6-results.json \
+        tests/performance/load-test.js
+    reports:
+      htmlDir: k6-report/
+
+  # ── 5. Security Scan (parallel subtasks) ──────────────────────────────────
+  - name: Security Scan
+    type: parallel
+    stages:
+      - name: SAST
+        type: shell
+        script: |
+          semgrep scan --config p/owasp-top-ten \
+            --sarif --output semgrep.sarif .
+        onFailure: "echo 'SAST findings — review semgrep.sarif'"
+
+      - name: Dependency Check
+        type: shell
+        script: |
+          trivy fs --severity HIGH,CRITICAL \
+            --format sarif --output trivy-fs.sarif \
+            --exit-code 0 .
+
+      - name: Secrets Detection
+        type: shell
+        script: |
+          gitleaks detect --source . --no-git \
+            --report-format sarif --report-path gitleaks.sarif \
+            --exit-code 1
+
+  # ── 6. Docker Build & Push ────────────────────────────────────────────────
+  - name: Docker Build & Push
+    type: docker
+    dependsOn:
+      - Build
+      - Unit Tests
+    image: myteam/my-api
+    registry: registry.example.com
+    dockerfile: Dockerfile
+    context: .
+    imageTag: "${BUILD_NUMBER}"         # resolved at runtime from env
+    registryCredential: registry-creds
+
+  # ── 7. Deploy to Staging (Helm) ───────────────────────────────────────────
+  - name: Deploy Staging
+    type: deploy
+    condition: "branch in ['main', 'release/*']"
+    dependsOn:
+      - Docker Build & Push
+    chart: myteam/my-api
+    release: my-api-staging
+    namespace: staging
+    values: k8s/staging-values.yaml
+    helmTimeout: "8m"
+
+  # ── 8. Deploy to Production (manual gate + Helm) ──────────────────────────
+  - name: Deploy Production
+    type: deploy
+    condition: "branch in ['main']"
+    dependsOn:
+      - Deploy Staging
+    chart: myteam/my-api
+    release: my-api-production
+    namespace: production
+    values: k8s/production-values.yaml
+    helmTimeout: "10m"
+    kubeconfig: prod-kubeconfig-cred
