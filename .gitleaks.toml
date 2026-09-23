@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[whitelist]
+description = "Ignore sample pipeline configs"
+paths = [
+  '''resources/.*''',
+  '''vars/.*'''
+]
