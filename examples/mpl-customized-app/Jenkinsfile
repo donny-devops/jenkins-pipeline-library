@@ -11,7 +11,7 @@ mplPipeline(
     modules: [
         Build: [
             tool : 'python',
-            goals: 'pip install -r requirements.txt'
+            goals: 'pip install -r requirements.example.txt'
         ],
         Test: [
             customRunner: true,
