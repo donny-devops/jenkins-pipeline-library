@@ -1,0 +1,58 @@
+# pipeline.yaml — Declarative DAG specification for dynamicPipeline()
+pipeline:
+  agent: docker
+  timeout: 60
+  env:
+    SERVICE_NAME: order-processing-service
+    REGISTRY: registry.example.com/production
+
+stages:
+  - name: Build
+    type: shell
+    script: mvn clean package -DskipTests -B
+
+  - name: Unit Tests
+    type: test
+    script: mvn test -B
+    reports:
+      junit: "**/surefire-reports/*.xml"
+
+  - name: Security Scan
+    type: parallel
+    stages:
+      - name: SAST Scan
+        script: semgrep scan --config p/ci .
+      - name: Secret Scan
+        script: gitleaks detect --source . --no-git
+
+  - name: Docker Build & Push
+    type: docker
+    dependsOn:
+      - Build
+      - Unit Tests
+    image: production/order-processing
+    registry: registry.example.com
+
+  - name: Deploy Staging
+    type: deploy
+    condition: "branch in ['main', 'release/*']"
+    dependsOn:
+      - Docker Build & Push
+    chart: charts/order-service
+    release: order-service-staging
+    namespace: staging
+
+  - name: Smoke Test Staging
+    type: shell
+    dependsOn:
+      - Deploy Staging
+    script: curl -f https://staging.example.com/health || exit 1
+
+  - name: Deploy Production
+    type: deploy
+    condition: "branch in ['main']"
+    dependsOn:
+      - Smoke Test Staging
+    chart: charts/order-service
+    release: order-service-production
+    namespace: production

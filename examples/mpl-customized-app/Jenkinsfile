@@ -1,0 +1,41 @@
+// examples/mpl-customized-app/Jenkinsfile
+@Library('pipeline-lib') _
+
+mplPipeline(
+    agent     : 'docker',
+    registry  : 'registry.example.com/platform',
+    namespace : 'staging',
+
+    stageOrder: ['Build', 'Test', 'SecurityScan', 'Docker', 'Deploy'],
+
+    modules: [
+        Build: [
+            tool : 'python',
+            goals: 'pip install -r requirements.txt'
+        ],
+        Test: [
+            customRunner: true,
+            coverageMin : 85,
+            testArgs    : '-v --maxfail=1'
+        ],
+        SecurityScan: [
+            failOnCritical: true,
+            skipSast      : false
+        ],
+        Docker: [
+            image     : 'platform/payment-service',
+            dockerfile: 'Dockerfile'
+        ],
+        Deploy: [
+            type        : 'canary',
+            canaryWeight: 10,
+            chart       : 'charts/payment-service',
+            release     : 'payment-service-staging'
+        ]
+    ],
+
+    // Deploy only runs on main or release branches
+    conditions: [
+        Deploy: { env.BRANCH_NAME ==~ /^(main|release\/.*)$/ }
+    ]
+)

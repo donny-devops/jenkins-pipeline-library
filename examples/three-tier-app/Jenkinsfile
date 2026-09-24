@@ -1,0 +1,52 @@
+// examples/three-tier-app/Jenkinsfile
+@Library('pipeline-lib') _
+
+threeTierDeploy(
+    agent       : 'docker',
+    registry    : 'registry.example.com/ecommerce',
+    imageTag    : env.BUILD_NUMBER ?: 'latest',
+    kubeconfig  : 'prod-k8s-cluster',
+    namespace   : 'production',
+    helmTimeout : '10m',
+
+    tiers: [
+        database: [
+            enabled  : true,
+            type     : 'helm',
+            chart    : 'bitnami/postgresql',
+            release  : 'ecommerce-postgres',
+            values   : 'k8s/database/values.yaml',
+            waitFor  : true,
+        ],
+        backend: [
+            enabled    : true,
+            buildTool  : 'maven',
+            image      : 'ecommerce/backend-api',
+            context    : 'backend/',
+            dockerfile : 'backend/Dockerfile',
+            k8sType    : 'manifest',
+            k8sDir     : 'k8s/backend/',
+            healthCheck: 'http://backend-service:8080/actuator/health',
+        ],
+        frontend: [
+            enabled    : true,
+            buildTool  : 'npm',
+            image      : 'ecommerce/frontend-web',
+            context    : 'frontend/',
+            dockerfile : 'frontend/Dockerfile',
+            k8sType    : 'manifest',
+            k8sDir     : 'k8s/frontend/',
+        ],
+    ],
+
+    onBuildSuccess : { tier ->
+        echo "Build & Dockerize phase passed for tier: ${tier}"
+    },
+    onDeploySuccess: { tier ->
+        notifySlack(status: 'SUCCESS', message: "Tier ${tier} rolled out successfully to ${env.KUBE_NS ?: 'production'}")
+    },
+    onFailure      : { tier, err ->
+        notifyPagerDuty(severity: 'critical', summary: "Deployment failure on tier ${tier}: ${err}")
+        notifySlack(status: 'FAILURE', message: "Deployment failure on tier ${tier}")
+    }
+)

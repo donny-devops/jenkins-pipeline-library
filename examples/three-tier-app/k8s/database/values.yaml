@@ -1,0 +1,19 @@
+# PostgreSQL Helm Values
+global:
+  postgresql:
+    auth:
+      username: "ecommerce"
+      database: "ecommerce_db"
+      existingSecret: "postgres-credentials"
+
+primary:
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi

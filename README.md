@@ -69,6 +69,10 @@ jenkins-pipeline-library/
 │   │   └── Deploy.groovy                # Helm / manifest deployments
 │   └── pipeline-configs/
 │       └── example-pipeline.yaml        # Full schema specification for dynamicPipeline
+├── examples/                            # Ready-to-use reference applications
+│   ├── three-tier-app/                  # Parallel builds + ordered K8s DB/backend/frontend rollout
+│   ├── mpl-customized-app/              # MPL pipeline with .jenkins/modules/ step overrides
+│   └── dynamic-dag-app/                 # Zero-code Jenkinsfile with pipeline.yaml DAG
 ├── tests/
 │   └── test_groovy_syntax.py            # Zero-dependency test & DAG validator suite
 ├── .github/workflows/
@@ -287,6 +291,18 @@ notifyPagerDuty(
     source    : "jenkins-ci-cluster"
 )
 ```
+
+---
+
+## Reference Applications (`examples/`)
+
+Self-contained blueprints illustrating real-world adoption patterns are included in [`examples/`](examples/):
+
+| Example Directory | Pipeline Pattern | Key Concepts Demonstrated |
+| :--- | :--- | :--- |
+| **[`three-tier-app/`](examples/three-tier-app/)** | `threeTierDeploy` | Parallel Maven backend & npm frontend builds, Docker builds, sequential PostgreSQL Helm + K8s manifest rollout, and smoke testing. |
+| **[`mpl-customized-app/`](examples/mpl-customized-app/)** | `mplPipeline` | Modular step execution with project-level overrides in `.jenkins/modules/Test.groovy` (custom pytest/coverage) and `.jenkins/modules/Deploy.groovy` (canary releases). |
+| **[`dynamic-dag-app/`](examples/dynamic-dag-app/)** | `dynamicPipeline` | Zero-code Jenkinsfile driven by `pipeline.yaml` with a Directed Acyclic Graph (`dependsOn`), parallel security scanning, and automated gating. |
 
 ---
 

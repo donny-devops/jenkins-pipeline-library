@@ -1,7 +1,8 @@
 """
 Comprehensive validation test suite for Jenkins Shared Library.
 Validates Groovy syntax structure, CPS Serializable compliance,
-package/class namespace integrity, MPL modules, and DAG pipeline configs.
+package/class namespace integrity, MPL modules, DAG pipeline configs,
+and reference example applications.
 Requires no external third-party dependencies (pure standard library).
 """
 
@@ -165,16 +166,15 @@ def parse_simple_yaml_stages(filepath: str) -> List[Dict]:
     return stages
 
 
-def test_dag_pipeline_config(repo_root: str):
-    """Validate example-pipeline.yaml stage dependency graph (DAG) for cycles and consistency."""
-    yaml_path = os.path.join(repo_root, "resources", "pipeline-configs", "example-pipeline.yaml")
-    assert os.path.isfile(yaml_path), "example-pipeline.yaml missing"
+def validate_dag(filepath: str, min_stages: int = 5):
+    """Validate a YAML stage dependency graph (DAG) for cycles and consistency."""
+    assert os.path.isfile(filepath), f"{filepath} missing"
 
-    stages = parse_simple_yaml_stages(yaml_path)
-    assert len(stages) >= 6, f"Expected at least 6 stages in example-pipeline.yaml, parsed {len(stages)}"
+    stages = parse_simple_yaml_stages(filepath)
+    assert len(stages) >= min_stages, f"Expected at least {min_stages} stages in {filepath}, parsed {len(stages)}"
 
     stage_names = {s["name"] for s in stages}
-    assert len(stage_names) == len(stages), "Duplicate stage names detected in pipeline config"
+    assert len(stage_names) == len(stages), f"Duplicate stage names detected in {filepath}"
 
     # Build adjacency list
     graph: Dict[str, List[str]] = {s["name"]: s["dependsOn"] for s in stages}
@@ -182,10 +182,9 @@ def test_dag_pipeline_config(repo_root: str):
     # Verify all dependencies reference real stages
     for name, deps in graph.items():
         for dep in deps:
-            assert dep in stage_names, f"Stage '{name}' depends on non-existent stage '{dep}'"
+            assert dep in stage_names, f"Stage '{name}' depends on non-existent stage '{dep}' in {filepath}"
 
     # Cycle detection via 3-color DFS
-    # 0 = unvisited, 1 = visiting, 2 = visited
     state = {name: 0 for name in stage_names}
 
     def dfs(node: str, path: List[str]):
@@ -204,7 +203,51 @@ def test_dag_pipeline_config(repo_root: str):
         if state[node] == 0:
             dfs(node, [])
 
-    print(f"  [OK] DAG validation passed for {len(stages)} stages in example-pipeline.yaml (Acyclic, no cycles)")
+    print(f"  [OK] DAG validation passed for {len(stages)} stages in {os.path.basename(filepath)} (Acyclic, no cycles)")
+
+
+def test_example_applications(repo_root: str):
+    """Validate reference example applications in examples/."""
+    examples_dir = os.path.join(repo_root, "examples")
+    assert os.path.isdir(examples_dir), "examples/ directory missing"
+
+    # 1. Three-Tier App
+    three_tier_jf = os.path.join(examples_dir, "three-tier-app", "Jenkinsfile")
+    assert os.path.isfile(three_tier_jf), "three-tier-app/Jenkinsfile missing"
+    with open(three_tier_jf, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "threeTierDeploy(" in content
+    assert "database:" in content and "backend:" in content and "frontend:" in content
+    print("  [OK] examples/three-tier-app/Jenkinsfile validated")
+
+    # 2. MPL Customized App
+    mpl_jf = os.path.join(examples_dir, "mpl-customized-app", "Jenkinsfile")
+    assert os.path.isfile(mpl_jf), "mpl-customized-app/Jenkinsfile missing"
+    with open(mpl_jf, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "mplPipeline(" in content
+    assert "stageOrder:" in content
+    print("  [OK] examples/mpl-customized-app/Jenkinsfile validated")
+
+    # Check MPL module overrides
+    for override in ["Test.groovy", "Deploy.groovy"]:
+        override_path = os.path.join(examples_dir, "mpl-customized-app", ".jenkins", "modules", override)
+        assert os.path.isfile(override_path), f"Missing MPL override: {override}"
+        with open(override_path, "r", encoding="utf-8") as f:
+            c = f.read()
+        assert "def call(" in c and "return this" in c
+        print(f"  [OK] examples/mpl-customized-app/.jenkins/modules/{override} validated")
+
+    # 3. Dynamic DAG App
+    dyn_jf = os.path.join(examples_dir, "dynamic-dag-app", "Jenkinsfile")
+    assert os.path.isfile(dyn_jf), "dynamic-dag-app/Jenkinsfile missing"
+    with open(dyn_jf, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "dynamicPipeline()" in content
+    print("  [OK] examples/dynamic-dag-app/Jenkinsfile validated")
+
+    dyn_yaml = os.path.join(examples_dir, "dynamic-dag-app", "pipeline.yaml")
+    validate_dag(dyn_yaml, min_stages=5)
 
 
 def main():
@@ -213,17 +256,21 @@ def main():
     print("=" * 65)
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-    print("\n[1/4] Validating Global Pipeline Variables (vars/)...")
+    print("\n[1/5] Validating Global Pipeline Variables (vars/)...")
     test_vars_structure(repo_root)
 
-    print("\n[2/4] Validating Core Classes (src/)...")
+    print("\n[2/5] Validating Core Classes (src/)...")
     test_src_classes(repo_root)
 
-    print("\n[3/4] Validating Modular Pipeline Library Modules (resources/mpl/)...")
+    print("\n[3/5] Validating Modular Pipeline Library Modules (resources/mpl/)...")
     test_mpl_modules(repo_root)
 
-    print("\n[4/4] Validating Dynamic Pipeline Configurations & DAG Graph...")
-    test_dag_pipeline_config(repo_root)
+    print("\n[4/5] Validating Dynamic Pipeline Configurations & DAG Graph...")
+    example_yaml = os.path.join(repo_root, "resources", "pipeline-configs", "example-pipeline.yaml")
+    validate_dag(example_yaml, min_stages=6)
+
+    print("\n[5/5] Validating Reference Example Applications (examples/)...")
+    test_example_applications(repo_root)
 
     print("\n" + "=" * 65)
     print("All validation suites passed cleanly! 0 errors, 100% compliant.")

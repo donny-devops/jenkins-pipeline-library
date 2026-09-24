@@ -1,0 +1,5 @@
+// examples/dynamic-dag-app/Jenkinsfile
+// Completely zero-code Jenkinsfile — pipeline definition lives in pipeline.yaml
+@Library('pipeline-lib') _
+
+dynamicPipeline()
