@@ -1,8 +1,16 @@
 // vars/notifyPagerDuty.groovy
 def call(Map config = [:]) {
     def routingKey = config.routingKey ?: env.PAGERDUTY_ROUTING_KEY
+    if (!routingKey) {
+        error "notifyPagerDuty: routingKey or PAGERDUTY_ROUTING_KEY is required"
+    }
+
+    def allowed = ["critical", "error", "warning", "info"]
     def summary = config.summary ?: "[Jenkins Pipeline] ${env.JOB_NAME} #${env.BUILD_NUMBER} Failure Alert"
-    def severity = config.severity ?: "error"
+    def severity = (config.severity ?: "error").toString().trim()
+    if (!allowed.contains(severity)) {
+        error "notifyPagerDuty: severity must be one of ${allowed}"
+    }
     def source = config.source ?: "jenkins-ci-pipeline"
     def dedupKey = config.dedupKey ?: "jenkins-${env.JOB_NAME}-${env.BUILD_NUMBER}"
 
