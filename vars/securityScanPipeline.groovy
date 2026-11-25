@@ -13,13 +13,13 @@ def call(Map config = [:]) {
             stage('Secret Scanning (Gitleaks)') {
                 steps {
                     echo "Running Gitleaks secret detection..."
-                    sh 'gitleaks detect --verbose || true'
+                    sh 'gitleaks detect --verbose'
                 }
             }
             stage('SCA & SAST Security Scanning') {
                 steps {
-                    echo "Executing Trivy and SonarQube static analysis..."
-                    sh 'trivy fs --security-checks vuln,config . || true'
+                    echo "Executing Trivy filesystem scan..."
+                    sh 'trivy fs --scanners vuln,secret,misconfig .'
                 }
             }
             stage('Wazuh SIEM Event Forwarding') {
